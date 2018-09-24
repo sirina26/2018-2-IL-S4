@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using NUnit.Framework;
 
 namespace ITI.PrimarySchool.DB.Tests
@@ -108,6 +109,38 @@ namespace ITI.PrimarySchool.DB.Tests
                     command.Parameters.AddWithValue( "@TeacherId", teacherId );
                     await command.ExecuteNonQueryAsync();
                 }
+            }
+        }
+
+        [Test]
+        public async Task create_and_remove_teacher_with_dapper()
+        {
+            using( SqlConnection conn = new SqlConnection( @"Server=.\SQLSERVER;Database=PrimarySchool;Trusted_Connection=True;" ) )
+            {
+                string firstName = CreateRandomName();
+                string lastName = CreateRandomName();
+
+                DynamicParameters parameters = new DynamicParameters( new { FirstName = firstName, LastName = lastName } );
+                parameters.Add( "@TeacherId", dbType: DbType.Int32, direction: ParameterDirection.Output );
+                parameters.Add( "@Result", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue );
+                await conn.ExecuteAsync( "ps.sTeacherCreate", parameters, commandType: CommandType.StoredProcedure );
+
+                Assert.That( parameters.Get<int>( "@Result" ), Is.EqualTo( 0 ) );
+                int teacherId = parameters.Get<int>( "@TeacherId" );
+
+                string cmdTxt = @"select count(*)
+                                  from ps.vTeacher v
+                                  where v.TeacherId = @TeacherId
+                                    and v.FirstName = @FirstName
+                                    and v.LastName = @LastName
+                                    and v.ClassId = 0
+                                    and v.ClassName = ''
+                                    and v.ClassLevel = '';";
+                Assert.That(
+                    await conn.ExecuteScalarAsync( cmdTxt, new { TeacherId = teacherId, FirstName = firstName, LastName = lastName } ),
+                    Is.EqualTo( 1 ) );
+
+                await conn.ExecuteAsync( "ps.sTeacherDestroy", new { TeacherId = teacherId }, commandType: CommandType.StoredProcedure );
             }
         }
 
