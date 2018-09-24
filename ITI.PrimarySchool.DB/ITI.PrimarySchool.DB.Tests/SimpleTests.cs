@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
@@ -27,6 +28,86 @@ namespace ITI.PrimarySchool.DB.Tests
                 CollectionAssert.Contains( teachers, new Teacher { FirstName = firstName, LastName = lastName } );
 
                 await RemoveTeacher( teacherId, conn );
+            }
+        }
+
+        [Test]
+        public async Task vTeacher_works_correctly()
+        {
+            using( SqlConnection conn = new SqlConnection( @"Server=.\SQLSERVER;Database=PrimarySchool;Trusted_Connection=True;" ) )
+            {
+                await conn.OpenAsync();
+                string firstName = CreateRandomName();
+                string lastName = CreateRandomName();
+                int teacherId = await CreateTeacher( firstName, lastName, conn );
+
+                string cmdTxt = @"select count(*)
+                                  from ps.vTeacher v
+                                  where v.TeacherId = @TeacherId
+                                    and v.FirstName = @FirstName
+                                    and v.LastName = @LastName
+                                    and v.ClassId = 0
+                                    and v.ClassName = ''
+                                    and v.ClassLevel = '';";
+                using( SqlCommand command = new SqlCommand( cmdTxt, conn ) )
+                {
+                    command.Parameters.AddWithValue( "@TeacherId", teacherId );
+                    command.Parameters.AddWithValue( "@FirstName", firstName );
+                    command.Parameters.AddWithValue( "@LastName", lastName );
+                    Assert.That( await command.ExecuteScalarAsync(), Is.EqualTo( 1 ) );
+                }
+
+                await RemoveTeacher( teacherId, conn );
+            }
+        }
+
+        [Test]
+        public async Task create_and_remove_teacher()
+        {
+            using( SqlConnection conn = new SqlConnection( @"Server=.\SQLSERVER;Database=PrimarySchool;Trusted_Connection=True;" ) )
+            {
+                await conn.OpenAsync();
+                string firstName = CreateRandomName();
+                string lastName = CreateRandomName();
+
+                int teacherId;
+                using( SqlCommand command = new SqlCommand( "ps.sTeacherCreate", conn ) )
+                {
+                    command.CommandType = CommandType.StoredProcedure;
+                    command.Parameters.AddWithValue( "@FirstName", firstName );
+                    command.Parameters.AddWithValue( "@LastName", lastName );
+                    SqlParameter teacherIdParameter = command.Parameters.Add( "@TeacherId", SqlDbType.Int );
+                    teacherIdParameter.Direction = ParameterDirection.Output;
+                    SqlParameter result = command.Parameters.Add( "@result", SqlDbType.Int );
+                    result.Direction = ParameterDirection.ReturnValue;
+
+                    await command.ExecuteNonQueryAsync();
+                    teacherId = ( int )teacherIdParameter.Value;
+                    Assert.That( result.Value, Is.EqualTo( 0 ) );
+                }
+
+                string cmdTxt = @"select count(*)
+                                  from ps.vTeacher v
+                                  where v.TeacherId = @TeacherId
+                                    and v.FirstName = @FirstName
+                                    and v.LastName = @LastName
+                                    and v.ClassId = 0
+                                    and v.ClassName = ''
+                                    and v.ClassLevel = '';";
+                using( SqlCommand command = new SqlCommand( cmdTxt, conn ) )
+                {
+                    command.Parameters.AddWithValue( "@TeacherId", teacherId );
+                    command.Parameters.AddWithValue( "@FirstName", firstName );
+                    command.Parameters.AddWithValue( "@LastName", lastName );
+                    Assert.That( await command.ExecuteScalarAsync(), Is.EqualTo( 1 ) );
+                }
+
+                using( SqlCommand command = new SqlCommand( "ps.sTeacherDestroy", conn ) )
+                {
+                    command.CommandType = CommandType.StoredProcedure;
+                    command.Parameters.AddWithValue( "@TeacherId", teacherId );
+                    await command.ExecuteNonQueryAsync();
+                }
             }
         }
 

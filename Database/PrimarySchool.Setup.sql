@@ -20,6 +20,20 @@ begin
 	drop view ps.vTeacher;
 end;
 
+if exists(select * from sys.procedures p
+              inner join sys.schemas s on s.schema_id = p.schema_id
+          where p.[name] = 'sTeacherCreate' and s.[name] = 'ps')
+begin
+	drop procedure ps.sTeacherCreate;
+end;
+
+if exists(select * from sys.procedures p
+              inner join sys.schemas s on s.schema_id = p.schema_id
+          where p.[name] = 'sTeacherDestroy' and s.[name] = 'ps')
+begin
+	drop procedure ps.sTeacherDestroy;
+end;
+
 if exists(select * from sys.tables t
               inner join sys.schemas s on s.schema_id = t.schema_id
           where t.[name] = 'tStudent' and s.[name] = 'ps')
@@ -103,3 +117,31 @@ as
 	from ps.tTeacher t
 		left outer join ps.tClass c on c.TeacherId = t.TeacherId
 	where t.TeacherId <> 0;
+GO
+
+create proc ps.sTeacherCreate
+(
+	@FirstName nvarchar(32),
+	@LastName nvarchar(32),
+	@TeacherId int out
+)
+as
+begin
+	if @FirstName is null or @FirstName = N'' return 1;
+	if @LastName is null or @LastName = N'' return 2;
+	if exists (select * from ps.tTeacher t where t.FirstName = @FirstName and t.LastName = @LastName) return 3;
+	insert into ps.tTeacher(FirstName, LastName) values(@FirstName, @LastName);
+	set @TeacherId = scope_identity();
+	return 0;
+end;
+GO
+
+create proc ps.sTeacherDestroy
+(
+	@TeacherId int
+)
+as
+begin
+	delete from ps.tTeacher where TeacherId = @TeacherId;
+	return 0;
+end;
